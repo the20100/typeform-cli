@@ -54,7 +54,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "Validate the request locally without hitting the API")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if isAuthCommand(cmd) || cmd.Name() == "info" || cmd.Name() == "update" || cmd.Name() == "schema" {
+		if isAuthCommand(cmd) || cmd.Name() == "info" || cmd.CommandPath() == "typeform update" || cmd.Name() == "schema" {
 			return nil
 		}
 

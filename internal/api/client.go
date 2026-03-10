@@ -2,11 +2,14 @@ package api
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -327,6 +330,41 @@ func (c *Client) ListImages() ([]Image, error) {
 
 func (c *Client) GetImage(id string) (*Image, error) {
 	body, err := c.Get("/images/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	var img Image
+	return &img, json.Unmarshal(body, &img)
+}
+
+func (c *Client) UploadImageFromURL(imageURL, fileName string) (*Image, error) {
+	payload := map[string]string{"url": imageURL}
+	if fileName != "" {
+		payload["file_name"] = fileName
+	}
+	body, err := c.Post("/images", nil, payload)
+	if err != nil {
+		return nil, err
+	}
+	var img Image
+	return &img, json.Unmarshal(body, &img)
+}
+
+func (c *Client) UploadImageFromFile(filePath string) (*Image, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading file: %w", err)
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(data)
+	fileName := filepath.Base(filePath)
+
+	payload := map[string]string{
+		"image":     encoded,
+		"file_name": fileName,
+	}
+
+	body, err := c.Post("/images", nil, payload)
 	if err != nil {
 		return nil, err
 	}
