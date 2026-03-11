@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/the20100/typeform-cli/internal/api"
 	"github.com/the20100/typeform-cli/internal/config"
 	"github.com/the20100/typeform-cli/internal/output"
 	"github.com/the20100/typeform-cli/internal/validate"
@@ -91,8 +93,65 @@ var imageDeleteCmd = &cobra.Command{
 	},
 }
 
+// ---- image upload ----
+
+var (
+	imageUploadFileName string
+)
+
+var imageUploadCmd = &cobra.Command{
+	Use:   "upload <url-or-file>",
+	Short: "Upload an image from a URL or local file",
+	Long: `Upload an image to Typeform from a public URL or local file path.
+The uploaded image gets a Typeform-hosted URL that can be used in form fields,
+welcome screens, and thank-you screens via the attachment.href property.
+
+Supported formats: JPEG, PNG, GIF, BMP. WebP is NOT supported by Typeform.
+
+Examples:
+  typeform image upload https://example.com/photo.png
+  typeform image upload ./logo.png
+  typeform image upload https://example.com/photo.png --file-name "my-logo.png"`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		source := args[0]
+		if dryRunFlag {
+			fmt.Printf("dry-run: would POST /images (source: %s)\n", source)
+			return nil
+		}
+
+		var (
+			img *api.Image
+			err error
+		)
+
+		if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
+			img, err = client.UploadImageFromURL(source, imageUploadFileName)
+		} else {
+			img, err = client.UploadImageFromFile(source)
+		}
+		if err != nil {
+			return err
+		}
+
+		if output.IsJSON(cmd) {
+			return output.PrintJSON(img, output.IsPretty(cmd))
+		}
+		output.PrintKeyValue([][]string{
+			{"ID", img.ID},
+			{"Filename", img.FileName},
+			{"Media Type", img.MediaType},
+			{"Size", fmt.Sprintf("%dx%d", img.Width, img.Height)},
+			{"Src", img.Src},
+		})
+		return nil
+	},
+}
+
 func init() {
-	imageCmd.AddCommand(imageListCmd, imageGetCmd, imageDeleteCmd)
+	imageUploadCmd.Flags().StringVar(&imageUploadFileName, "file-name", "", "Override the file name stored in Typeform")
+
+	imageCmd.AddCommand(imageListCmd, imageGetCmd, imageUploadCmd, imageDeleteCmd)
 	rootCmd.AddCommand(imageCmd)
 
 	RegisterSchema("images.list", SchemaEntry{
@@ -105,6 +164,18 @@ func init() {
 		Description: "Get details of a specific image",
 		Args:        []SchemaArg{{Name: "image-id", Required: true, Desc: "Image ID"}},
 		Mutating:    false,
+	})
+	RegisterSchema("images.upload", SchemaEntry{
+		Command:     "typeform image upload <url-or-file>",
+		Description: "Upload an image from a URL or local file. Returns the Typeform-hosted URL to use in form attachments.",
+		Args:        []SchemaArg{{Name: "url-or-file", Required: true, Desc: "Public image URL or local file path"}},
+		Flags:       []SchemaFlag{{Name: "--file-name", Type: "string", Desc: "Override the stored file name"}},
+		Examples: []string{
+			"typeform image upload https://example.com/logo.png",
+			"typeform image upload ./photo.jpg --file-name brand-photo.jpg",
+			"typeform image upload https://cdn.example.com/hero.png --pretty",
+		},
+		Mutating: true,
 	})
 	RegisterSchema("images.delete", SchemaEntry{
 		Command:     "typeform image delete <image-id>",
